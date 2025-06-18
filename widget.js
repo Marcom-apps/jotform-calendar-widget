@@ -1,4 +1,4 @@
-(function() {
+(function() {Add commentMore actions
   const settings = {
     minWorkingDays: parseInt(JFCustomWidget.getWidgetSetting('minWorkingDays')) || 5,
     disableWeekends: JFCustomWidget.getWidgetSetting('disableWeekends') === 'true',
