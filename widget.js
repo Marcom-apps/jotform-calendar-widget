@@ -1,9 +1,16 @@
 (function() {
   const settings = {
-    minWorkingDays: parseInt(JFCustomWidget.getWidgetSetting('minWorkingDays')) || 5,
-    disableWeekends: JFCustomWidget.getWidgetSetting('disableWeekends') === 'true',
-    publicHolidays: (JFCustomWidget.getWidgetSetting('publicHolidays') || "").split(','),
-    defaultToEarliest: JFCustomWidget.getWidgetSetting('defaultToEarliest') === 'true'
+    noticeDays: parseInt(JFCustomWidget.getWidgetSetting('noticeDays')) || 5,
+    cutoffHour: parseInt(JFCustomWidget.getWidgetSetting('cutoffHour')) || 8,
+    holidayDates: (JFCustomWidget.getWidgetSetting('holidayDates') || "").split(',').map(s => new Date(s.trim())).filter(d => !isNaN(d)),
+    targetFieldClass: JFCustomWidget.getWidgetSetting('targetFieldClass') || "#calendar",
+    defaultDateOffset: parseInt(JFCustomWidget.getWidgetSetting('defaultDateOffset')) || 0
+  };
+
+  Date.prototype.addDays = function(days) {
+    const date = new Date(this.valueOf());
+    date.setDate(date.getDate() + days);
+    return date;
   };
 
   function isWeekend(date) {
@@ -11,40 +18,30 @@
   }
 
   function isHoliday(date) {
-    return settings.publicHolidays.some(d => new Date(d).toDateString() === date.toDateString());
+    return settings.holidayDates.some(h => h.toDateString() === date.toDateString());
   }
 
-  function isTooEarly(date, minDate) {
-    return date.setHours(0,0,0,0) < minDate.setHours(0,0,0,0);
+  function isTooEarly(date) {
+    return date.setHours(0, 0, 0, 0) < earliestPickableDate.setHours(0, 0, 0, 0);
   }
 
-  Date.prototype.addDays = function(days) {
-    var date = new Date(this.valueOf());
-    date.setDate(date.getDate() + days);
-    return date;
-  };
+  // Determine the earliest valid pickable date
+  let earliestPickableDate = new Date();
+  const nowHour = new Date().getHours();
+  let daysNeeded = nowHour < settings.cutoffHour ? settings.noticeDays : settings.noticeDays + 1;
+  let workingDaysAdded = 0;
 
-  let minDate = new Date();
-  let daysAdded = 0;
-  while (daysAdded < settings.minWorkingDays) {
-    let next = minDate.addDays(1);
-    if ((!settings.disableWeekends || !isWeekend(next)) && !isHoliday(next)) {
-      daysAdded++;
+  while (workingDaysAdded < daysNeeded) {
+    const next = earliestPickableDate.addDays(1);
+    if (!isWeekend(next) && !isHoliday(next)) {
+      workingDaysAdded++;
     }
-    minDate = next;
+    earliestPickableDate = next;
+  }
+
+  if (settings.defaultDateOffset > 0) {
+    earliestPickableDate = earliestPickableDate.addDays(settings.defaultDateOffset);
   }
 
   window.addEventListener('load', function () {
-    flatpickr("#calendar", {
-      altFormat: "d/m/Y",
-      altInput: true,
-      defaultDate: settings.defaultToEarliest ? minDate : null,
-      disable: [
-        settings.disableWeekends ? isWeekend : null,
-        isHoliday,
-        function(date) { return isTooEarly(date, minDate); }
-      ].filter(Boolean),
-      locale: { firstDayOfWeek: 1 }
-    });
-  });
-})();
+    const field = document.querySe
