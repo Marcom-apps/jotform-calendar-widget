@@ -25,7 +25,7 @@
     // --- 1. Get URL Parameters ---
     const params = new URLSearchParams(window.location.search);
 
-    const noticeDays = parseInt(params.get("noticeDays") || "10", 10);
+    const noticeDays = parseInt(params.get("noticeDays") || "5", 10);
     const cutoffHour = parseInt(params.get("cutoffHour") || "8", 10);
     const defaultDateOffset = parseInt(params.get("defaultDateOffset") || "0", 10);
 
