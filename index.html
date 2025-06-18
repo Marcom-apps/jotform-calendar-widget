@@ -8,10 +8,11 @@
   </style>
 </head>
 <body>
+  <!-- Default input field -->
   <input id="calendar" type="text" class="flatpickr-input" readonly="readonly">
+
   <script src="https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
   <script>
-    // Read config from Jotform widget settings
     function getWidgetSetting(name, fallback = "") {
       try {
         const raw = window.frameElement?.getAttribute("data-" + name);
@@ -23,16 +24,17 @@
 
     const noticeDays = parseInt(getWidgetSetting("noticedays", "5"), 10);
     const cutoffHour = parseInt(getWidgetSetting("cutoffhour", "8"), 10);
-    const targetFieldClass = getWidgetSetting("targetfieldclass", "#calendar");
     const holidayDatesRaw = getWidgetSetting("holidaydates", "");
     const defaultDateOffset = parseInt(getWidgetSetting("defaultdateoffset", "0"), 10);
+
+    // Try to use custom selector if provided, fallback to our default field
+    const targetFieldClass = getWidgetSetting("targetfieldclass", "#calendar") || "#calendar";
 
     const holidayDates = holidayDatesRaw
       .split(",")
       .map(dateStr => new Date(dateStr.trim()))
       .filter(date => !isNaN(date));
 
-    // Utility to add working days
     Date.prototype.addDays = function (days) {
       const date = new Date(this.valueOf());
       date.setDate(date.getDate() + days);
@@ -69,7 +71,13 @@
     }
 
     window.addEventListener('load', function () {
-      flatpickr(targetFieldClass, {
+      const targetField = document.querySelector(targetFieldClass);
+      if (!targetField) {
+        console.warn(`No element found for selector: ${targetFieldClass}`);
+        return;
+      }
+
+      flatpickr(targetField, {
         altFormat: 'd/m/Y',
         altInput: true,
         defaultDate: earliestPickableDate,
