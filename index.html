@@ -1,35 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Powerco Calendar Widget</title>
+  <meta charset="UTF-8">
+  <title>Powerco Custom Calendar Widget</title>
   <link rel="stylesheet" href="https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.css">
   <style>
-    body { font-family: Arial, sans-serif; margin: 10px; }
-    #calendar { width: 100%; padding: 10px; font-size: 16px; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 10px;
+    }
+    #calendar {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
 
-  <!-- Updated input with correct target class -->
-  <input id="calendar" type="text" class="js-requested-date" readonly="readonly">
+  <input id="calendar" type="text" class="flatpickr-input" readonly="readonly">
 
-  <!-- Load Flatpickr library -->
   <script src="https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
-
-  <!-- Calendar initialization script -->
   <script>
+    // --- 1. Get URL Parameters ---
     const params = new URLSearchParams(window.location.search);
 
     const noticeDays = parseInt(params.get("noticeDays") || "5", 10);
     const cutoffHour = parseInt(params.get("cutoffHour") || "8", 10);
-    const targetFieldClass = params.get("targetFieldClass") || ".js-requested-date";
+    const defaultDateOffset = parseInt(params.get("defaultDateOffset") || "0", 10);
 
+    const targetFieldClass = params.get("targetFieldClass") || "#calendar";
     const holidayDates = (params.get("holidayDates") || "")
       .split(",")
-      .map(dateStr => new Date(dateStr.trim()))
-      .filter(date => !isNaN(date));
+      .map(d => new Date(d.trim()))
+      .filter(d => !isNaN(d));
 
-    Date.prototype.addDays = function (days) {
+    // --- 2. Utility Functions ---
+    Date.prototype.addDays = function(days) {
       const date = new Date(this.valueOf());
       date.setDate(date.getDate() + days);
       return date;
@@ -47,11 +54,13 @@
       return date.setHours(0, 0, 0, 0) < earliestPickableDate.setHours(0, 0, 0, 0);
     }
 
+    // --- 3. Calculate Earliest Pickable Date ---
     let earliestPickableDate = new Date();
     const nowHour = new Date().getHours();
     let workingDaysToAdd = nowHour < cutoffHour ? noticeDays : noticeDays + 1;
-    let workingDaysAdded = 0;
+    workingDaysToAdd += defaultDateOffset;
 
+    let workingDaysAdded = 0;
     while (workingDaysAdded < workingDaysToAdd) {
       const nextDate = earliestPickableDate.addDays(1);
       if (!isWeekend(nextDate) && !isHoliday(nextDate)) {
@@ -60,18 +69,28 @@
       earliestPickableDate = nextDate;
     }
 
-    window.addEventListener('load', function () {
+    // --- 4. Initialise Flatpickr ---
+    window.addEventListener("load", function () {
       flatpickr(targetFieldClass, {
-        altFormat: 'd/m/Y',
         altInput: true,
+        altFormat: "d/m/Y",
         defaultDate: earliestPickableDate,
         disable: [isWeekend, isHoliday, isTooEarly],
         locale: {
           firstDayOfWeek: 1
         }
       });
+
+      // Optional: Log parameters for debugging
+      console.log("Widget Params", {
+        noticeDays,
+        cutoffHour,
+        defaultDateOffset,
+        holidayDates,
+        targetFieldClass,
+        earliestPickableDate
+      });
     });
   </script>
-
 </body>
 </html>
