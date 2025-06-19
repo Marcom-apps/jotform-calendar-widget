@@ -1,75 +1,111 @@
 (function () {
-  function addDaysSkippingWeekendsAndHolidays(startDate, daysToAdd, holidays) {
-    let result = new Date(startDate);
-    let added = 0;
-    while (added < daysToAdd) {
-      result.setDate(result.getDate() + 1);
-      if (![0, 6].includes(result.getDay()) && !isHoliday(result, holidays)) {
-        added++;
-      }
-    }
-    return result;
+  // Set timezone to NZ (Auckland)
+  const timeZone = 'Pacific/Auckland';
+
+  // Format a date as YYYY-MM-DD (for comparisons)
+  function formatDate(date) {
+    return date.toISOString().split('T')[0];
   }
 
-  function isHoliday(date, holidays) {
-    return holidays.some(d => d.toDateString() === date.toDateString());
-  }
-
-  function isWeekend(date) {
-    return date.getDay() === 0 || date.getDay() === 6;
-  }
-
-  function isTooEarly(date, minDate) {
-    return date.setHours(0, 0, 0, 0) < minDate.setHours(0, 0, 0, 0);
-  }
-
-  function parseHolidayString(holidayStr) {
-    return (holidayStr || "").split(",").map(s => new Date(s.trim())).filter(d => !isNaN(d));
-  }
-
-  JFCustomWidget.subscribe("ready", function () {
-    const noticeDays = parseInt(JFCustomWidget.getWidgetSetting("noticeDays")) || 5;
-    const cutoffHour = parseInt(JFCustomWidget.getWidgetSetting("cutoffHour")) || 8;
-    const holidayDates = parseHolidayString(JFCustomWidget.getWidgetSetting("holidayDates"));
-    const targetFieldClass = JFCustomWidget.getWidgetSetting("targetFieldClass") || "#calendar";
-    const defaultDateOffset = parseInt(JFCustomWidget.getWidgetSetting("defaultDateOffset")) || 0;
-
-    // Calculate earliest pickable date
+  // Get today's date in NZ time
+  function getNowInNZ() {
     const now = new Date();
-    const afterCutoff = now.getHours() >= cutoffHour;
-    const workingDaysToAdd = noticeDays + (afterCutoff ? 1 : 0);
-    const earliestPickableDate = addDaysSkippingWeekendsAndHolidays(now, workingDaysToAdd, holidayDates);
-    const finalPickableDate = defaultDateOffset > 0
-      ? addDaysSkippingWeekendsAndHolidays(earliestPickableDate, defaultDateOffset, holidayDates)
-      : earliestPickableDate;
+    const nzTime = new Date(now.toLocaleString('en-NZ', { timeZone }));
+    return nzTime;
+  }
 
-    // Target input
-    const inputField = document.querySelector(targetFieldClass);
-    if (!inputField) {
-      console.warn(`No field found for selector "${targetFieldClass}"`);
-      return;
+  // Get number of working days to block
+  function getBlockedWorkingDayCount() {
+    const nzNow = getNowInNZ();
+    const hour = nzNow.getHours();
+    return hour < 8 ? 6 : 5;
+  }
+
+  // Get next N working days *including today*
+  function getNextWorkingDays(count) {
+    const today = getNowInNZ();
+    let workingDays = [];
+    let current = new Date(today);
+
+    while (workingDays.length < count) {
+      const day = current.getDay();
+      if (day !== 0 && day !== 6) {
+        workingDays.push(new Date(current));
+      }
+      current.setDate(current.getDate() + 1);
     }
 
-    flatpickr(inputField, {
-      altInput: true,
-      altFormat: "d/m/Y",
-      defaultDate: finalPickableDate,
-      disable: [
-        date => isWeekend(date),
-        date => isHoliday(date, holidayDates),
-        date => isTooEarly(date, finalPickableDate)
-      ],
-      locale: {
-        firstDayOfWeek: 1
+    return workingDays.map(formatDate);
+  }
+
+  // NZ public holidays (static + Matariki 2025–2029)
+  const nzHolidays = [
+    "01-01", "01-02", "02-06", "04-25", "06-01", "10-28", "12-25", "12-26",
+    "2025-06-20", "2026-07-10", "2027-06-25", "2028-07-14", "2029-07-06"
+  ];
+
+  function getHolidayDates() {
+    const currentYear = getNowInNZ().getFullYear();
+    const years = Array.from({ length: 5 }, (_, i) => currentYear + i);
+    let holidays = [];
+
+    for (let year of years) {
+      for (let h of nzHolidays) {
+        if (h.length === 5) {
+          holidays.push(`${year}-${h}`);
+        } else if (h.startsWith(`${year}`)) {
+          holidays.push(h);
+        }
+      }
+    }
+    return holidays;
+  }
+
+  // Disable rules
+  function getDisableRules(blockedDates, minSelectableDateStr, publicHolidays) {
+    return [
+      function (date) {
+        const ymd = formatDate(date);
+        const day = date.getDay();
+
+        if (day === 0 || day === 6) return true; // Weekend
+        if (ymd < minSelectableDateStr) return true;
+        if (blockedDates.includes(ymd)) return true;
+        if (publicHolidays.includes(ymd)) return true;
+
+        return false;
+      }
+    ];
+  }
+
+  // Run logic
+  const blockCount = getBlockedWorkingDayCount();
+  const blockedDates = getNextWorkingDays(blockCount);
+  const minDateObj = new Date(blockedDates[blockedDates.length - 1]);
+  minDateObj.setDate(minDateObj.getDate() + 1);
+  const minSelectableDateStr = formatDate(minDateObj);
+  const publicHolidays = getHolidayDates();
+
+  // Init Flatpickr
+  const calendarInput = document.getElementById("calendar");
+  const calendar = flatpickr(calendarInput, {
+    disable: getDisableRules(blockedDates, minSelectableDateStr, publicHolidays),
+    dateFormat: "d-m-Y", // NZ format
+    onChange: function (selectedDates, dateStr) {
+      if (typeof JFCustomWidget !== "undefined") {
+        // Send ISO format back (not display format)
+        JFCustomWidget.sendData(formatDate(selectedDates[0]));
+      }
+    }
+  });
+
+  // Widget integration
+  if (typeof JFCustomWidget !== "undefined") {
+    JFCustomWidget.init({
+      onSubmit: function () {
+        const selected = calendarInput.value;
+        JFCustomWidget.sendSubmit(selected);
       }
     });
-
-    // Return selected value to Jotform
-    JFCustomWidget.subscribe("submit", function () {
-      JFCustomWidget.sendSubmit({
-        valid: true,
-        value: inputField.value
-      });
-    });
-  });
+  }
 })();
